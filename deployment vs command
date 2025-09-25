@@ -1,0 +1,1 @@
+sf project deploy validate --manifest "C:\Users\hmishra028\OneDrive - PwC\Desktop\NewOneUAT_AND_CRBPM\manifest\package.xml" --target-org BPMDEVNew --verbose
