@@ -1,0 +1,1 @@
+sf project deploy validate --target-org devOrg --source-dir force-app --verbose
