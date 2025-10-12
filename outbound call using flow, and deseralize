@@ -1,0 +1,132 @@
+public with sharing class HyperDataOutbound {
+@InvocableMethod(label='DataUsingFlow')
+public static List<HyperDataOutbound.HyperDataResponseFlow> dataUsingFromFlow(List<HyperDataOutbound.HyperDataRequestFlow> requestDetailsFlow){ 
+List<HyperDataOutbound.HyperDataResponseFlow> resFlow = new List<HyperDataOutbound.HyperDataResponseFlow>();
+HyperDataOutbound.HyperDataResponseFlow resFlowOne = new HyperDataOutbound.HyperDataResponseFlow();
+HyperDataOutbound.HyperDataRequest requestDetailsOne = new HyperDataOutbound.HyperDataRequest();
+String hyperDataRes;
+// Preparing Request for callout 
+requestDetailsOne.clientid=requestDetailsFlow[0].clientid;
+requestDetailsOne.policy=requestDetailsFlow[0].policy;
+requestDetailsOne.source_applications_name=requestDetailsFlow[0].source_applications_name; 
+requestDetailsOne.pref_lang_spoken=requestDetailsFlow[0].pref_lang_spoken;
+requestDetailsOne.pref_lang_written=requestDetailsFlow[0].pref_lang_written; 
+requestDetailsOne.pref_mode= requestDetailsFlow[0].pref_mode;
+requestDetailsOne.pref_time_slot=requestDetailsFlow[0].pref_time_slot;
+requestDetailsOne.updated_date=requestDetailsFlow[0].updated_date;
+requestDetailsOne.hyper_created_date=requestDetailsFlow[0].hyper_created_date;
+String recordId = requestDetailsFlow[0].recordId; LogBuilder.start('HyperDataAPI', 'HyperDataAPI', recordId);
+hyperDataRes = HyperDataOutbound.hyperDataConnectorCall(requestDetailsOne, recordId); 
+LogBuilder.commitLogs('HyperDataAPI', 'HyperDataAPI'); System.debug('check ln 27 '+ hyperDataRes);
+//System.debug('check ln29' + hyperDataRes.responseBody.data);
+// String decryptedHyperDataRes = BPM_APIEncryption.decryptData(JSON.serialize(hyperDataRes)); 
+// String decryptedHyperDataRes = HyperDataOutbound.decryptDataOne(JSON.serialize(hyperDataRes));
+// String decryptedHyperDataRes = HyperDataOutbound.decryptDataOne(hyperDataRes);
+//String decryptedHyperDataRes = HyperDataOutbound.decryptDataOne(JSON.serialize(hyperDataRes.responseBody.data));
+// System.debug('Check ln 31 '+ decryptedHyperDataRes);
+Map<String, Object> outerMap = (Map<String, Object>)JSON.deserializeUntyped(hyperDataRes);
+System.debug('check ln 45'+outerMap); 
+String jsResOne = (String)outerMap.get('responseBody');
+System.debug('check ln 49'+jsResOne); Map<String , Object > innerMap = (Map<String, Object>)JSON.deserializeUntyped(jsResOne);
+System.debug('check ln 54'+innerMap); 
+String jsResTwo = (String)innerMap.get('data'); System.debug('check ln 59'+innerMap); 
+String decryptedHyperDataRes = HyperDataOutbound.decryptDataOne(jsResTwo); 
+resFlowOne = (HyperDataOutbound.HyperDataResponseFlow)JSON.deserialize(decryptedHyperDataRes, HyperDataOutbound.HyperDataResponseFlow.class); 
+System.debug('Check ln 37 ' +resFlowOne); resFlow.add(resFlowOne); System.debug('ln 72' +resFlow); 
+return resFlow;
+} public static string hyperDataConnectorCall(HyperDataOutbound.HyperDataRequest requestDetails, String recordId){ 
+//Map to hold ServiceName to IntegrationInterface Details 
+Map<String,IntegrationInterface__mdt> integrationMap = new Map<String,IntegrationInterface__mdt>();
+//Variable to hold the service name String serviceName;
+//Http response HTTPConnector.HTTPResponseWrapper responseReceived = new HTTPConnector.HTTPResponseWrapper(); 
+try{
+//Variable to hold response received String responseBodyReceived;
+//Variable to hold job Id String jobId;
+//Variable to hold the request body of the http request String requestBody;
+// List to hold recordId for processing the record after receiving the response List<String> listRecordId = new List<String>();
+if(!String.isBlank(recordId)) { listRecordId.add(recordId);
+} //Used custom label to query custom metadata
+serviceName = Label.CRM_HyperData; 
+//Invoke Apex class to get the api details from custom metadata for making callout 
+integrationMap = CustomMetadataUtility.getAPIDetails(serviceName); 
+Map<String, Object> mpp = new Map<string,string>();
+if(integrationMap.get(serviceName).RequestasEncrypt__c != null && integrationMap.get(serviceName).RequestasEncrypt__c == true){
+//form request body as encrypted String requestBody = HyperDataOutbound.encryptDataOne(JSON.serialize(requestDetails));
+} else{
+//form request body as JSON
+requestBody = JSON.serialize(requestDetails); 
+}
+mpp.put('data',requestBody);
+String payload = JSON.serialize(mpp); String newString = '{ "data": "' + requestBody + '" }';
+// Output the result System.debug(newString); System.debug('Debugging ln 91 '+requestBody);
+System.debug('Debugging ln 99'+ payload); 
+//Forming Dynamic header with auth token //
+Map<String,String> mapDynamicHeader = new Map<String,String>{'Authorization'=>'Bearer '+token};
+//Forming http request parameter 
+HTTPParametersWrapper parameterDetails = new HTTPParametersWrapper(payload,null,listRecordId,integrationMap.get(serviceName),null,new Map<String,String>());
+responseReceived = HTTPConnector.performCalloutWithToken(parameterDetails);
+responseBodyReceived = JSON.serialize(responseReceived);
+LogBuilder.apiLog(LogBuilder.LogLevel.DEBUG, 'HyperDataAPI', 'HyperDataAPI'); 
+/*if(Test.isRunningTest()){ String s; Boolean b = s.contains('Apex');
+}*/ return responseBodyReceived;
+}catch(Exception ex){
+responseReceived.errorMessage = ex.getMessage(); 
+System.debug('responseBodyReceivedCatch-->'+JSON.serialize(responseReceived));
+LogBuilder.apiLogException('HyperDataAPI', recordId, ex); 
+return JSON.serialize(responseReceived);
+} }
+public static String encryptDataOne(String dataToEncrypt)
+{ 
+BPMConfiguration__mdt config = BPMConfiguration__mdt.getInstance('APIEncryptionNewHD');
+Blob Iv = Blob.valueOf(config.CryptoIV__c); 
+Blob key = Blob.valueOf(config.CryptoKey__c); 
+Blob data = Blob.valueOf(dataToEncrypt);
+Blob encrypted = Crypto.encrypt('AES256', key, Iv, data); 
+String encryptedString = EncodingUtil.base64Encode(encrypted); 
+System.debug('encryptedString:'+encryptedString); 
+return encryptedString;
+} 
+public static String decryptDataOne(String dataToDecrypt) { 
+BPMConfiguration__mdt config = BPMConfiguration__mdt.getInstance('APIEncryptionNewHD');
+Blob Iv = Blob.valueOf(config.CryptoIV__c);
+Blob key = Blob.valueOf(config.CryptoKey__c); 
+Blob encrypted = EncodingUtil.base64Decode(dataToDecrypt);
+Blob decrypted = Crypto.decrypt('AES256', key, Iv, encrypted); 
+String decryptedString = decrypted.toString(); 
+System.debug('decryptedString:'+decryptedString); 
+return decryptedString; 
+} 
+public class HyperDataRequest{ 
+public String clientid; 
+//12345 public String policy;
+//654321 public String source_applications_name;
+//Web public String pref_lang_spoken; 
+//english public String pref_lang_written; 
+//english public String pref_mode;
+//any public String pref_time_slot; 
+//4 public String updated_date; 
+//23-10-2025 public String hyper_created_date; 
+//23-10-2025
+} public class HyperDataRequestFlow{
+@InvocableVariable public String clientid;
+//12345 @InvocableVariable public String policy; 
+@InvocableVariable //654321 public String source_applications_name; 
+//Web @InvocableVariable public String pref_lang_spoken;
+//english @InvocableVariable public String pref_lang_written; 
+//english @InvocableVariable public String pref_mode;
+//any @InvocableVariable public String pref_time_slot; 
+//4 @InvocableVariable public String updated_date; 
+//23-10-2025 @InvocableVariable public String hyper_created_date;
+//23-10-2025 @InvocableVariable public String recordId; 
+} public class HyperDataResponse{
+public String success;
+//true public String statusCode;
+//200 public String hyperResponse;
+//Data Inserted Sucessfully
+} public class HyperDataResponseFlow{
+@InvocableVariable public String success;
+//true @InvocableVariable public String statusCode; 
+//200 @InvocableVariable public String hyperResponse;
+//Data Inserted Sucessfully
+} 
+}
