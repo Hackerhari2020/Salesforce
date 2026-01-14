@@ -1,0 +1,1 @@
+select LinkedEntityId, ContentDocumentId, ContentDocument.Title, ContentDocument.ContentSize, ContentDocument.ContentSizeLong, ContentDocument.FileType from ContentDocumentLink where LinkedEntity.type = 'Case' and LinkedEntityId in (Select id from case)
